@@ -121,7 +121,7 @@ class MongoGridFS extends MongoCollection
         $extra['chunkSize'] = isset($extra['chunkSize']) ? $extra['chunkSize']: self::DEFAULT_CHUNK_SIZE;
         $extra['_id'] = isset($extra['_id']) ?: new MongoId();
         $extra['length'] = $length;
-        $extra['md5'] = isset($md5) ? $md5 : $this->calculateMD5($filename, $length);
+        $extra['md5'] = isset($md5) ? $md5 : $this->calculateMD5($filename);
         $extra['filename'] = isset($extra['filename']) ? $extra['filename'] : $shortName;
 
         $fileDocument = $this->insertFile($extra);
@@ -288,18 +288,21 @@ class MongoGridFS extends MongoCollection
         $offset = 0;
         $i = 0;
 
+        rewind($file);
+
         while ($offset < $length) {
-            $data = fread($file, $chunkSize);
+            $data = stream_get_contents($file, $chunkSize);
             $this->insertChunk($fileId, $data, $i++);
             $offset += $chunkSize;
         }
     }
 
-    private function calculateMD5($file, $length)
+    private function calculateMD5($file)
     {
         // XXX: this could be really a bad idea with big files...
-        $data = fread($file, $length);
-        fseek($file, 0);
+        rewind($file);
+        $data = stream_get_contents($file);
+
         return md5($data);
     }
 
@@ -308,13 +311,11 @@ class MongoGridFS extends MongoCollection
         $length = $fileInfo['length'];
         $chunkSize = $fileInfo['chunkSize'];
         $fileId = $fileInfo['_id'];
-        $offset = 0;
         $i = 0;
 
-        while ($offset < $length) {
-            $data = mb_substr($bytes, $offset, $chunkSize, '8bit');
-            $this->insertChunk($fileId, $data, $i++);
-            $offset += $chunkSize;
+        $chunks = str_split($bytes, $chunkSize);
+        foreach ($chunks as $chunk) {
+            $this->insertChunk($fileId, $chunk, $i++);
         }
     }
 
